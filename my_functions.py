@@ -1,8 +1,7 @@
-import copy
-from collections import namedtuple
-
 import cv2
 import numpy as np
+import json
+import copy
 
 
 def TrackBars(_, window):
@@ -35,3 +34,88 @@ def TrackBars(_, window):
     max = np.array([limit['B']['max'], limit['G']['max'], limit['R']['max']])
 
     return limit, min, max
+
+
+
+
+def createMask(ranges, image):
+    """
+    Using a dictionary wth ranges, create a mask of an image respecting those ranges
+    :param ranges: Dictionary generated in color_segmenter.py
+    :param image: Cv2 image - UInt8
+    :return mask: Cv2 image - UInt8
+    """
+
+    # Create an array for minimum and maximum values
+    min = np.array([ranges['B']['min'], ranges['G']['min'], ranges['R']['min']])
+    max = np.array([ranges['B']['max'], ranges['G']['max'], ranges['R']['max']])
+
+    # Create a mask using the previously created array
+    mask = cv2.inRange(image, min, max)
+
+    return mask
+
+
+def getCentroid(mask_original):
+    """
+    Create a mask with the largest blob of mask_original and return its centroid coordinates
+    :param mask_original: Cv2 image - Uint8
+    :return mask: Cv2 image - Bool
+    :return centroid: List of 2 values
+    """
+
+    # Defining maximum area and mask label
+    maxArea = 0
+    maxLabel = 0
+
+    # You need to choose 4 or 8 for connectivity type
+    connectivity = 4
+
+    # Perform the operation
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_original, connectivity, cv2.CV_32S)
+
+    # For each blob, find their area and compare it to the largest one
+    for label in range(1, num_labels):
+        # Find area
+        area = stats[label, cv2.CC_STAT_AREA]
+
+        # If the area is larger than the max area, replace it
+        if area > maxArea:
+            maxArea = area
+            maxLabel = label
+
+    # If there are blobs, the label has to be different from zero
+    if maxLabel != 0:
+        # Create a new mask and find its centroid
+        mask = labels == maxLabel
+        centroid = centroids[maxLabel]
+    else:
+        # If there are no blobs, the mask stays the same, and there are no centroids
+        mask = mask_original
+        centroid = None
+
+    return mask, centroid
+
+
+def maxArea(image, mask):
+    """
+    Using a mask, create a green undertone to an image
+    :param image: Cv2 image - Uint8
+    :param mask: Cv2 image - Bool
+    :return image: Cv2 image - Uint8
+    """
+
+    # Determine image size
+    h, w, _ = image.shape
+
+    # Creating colour channels, using the mask as the green one
+    b = np.zeros(shape=[h, w], dtype=np.uint8)
+    g = mask.astype(np.uint8) * 255
+    r = copy.deepcopy(b)
+
+    # Merge the channels to create a green mask
+    image_green = cv2.merge([b, g, r])
+
+    return image_green
+
+
